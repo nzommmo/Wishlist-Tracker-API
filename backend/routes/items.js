@@ -1,10 +1,9 @@
+// routes/items.js
 const router = require('express').Router({ mergeParams: true })
 const auth = require('../middleware/auth')
 const multer = require('multer')
 const path = require('path')
 const db = require('../db')
-
-// Storage configuration for multer
 
 const storage = multer.diskStorage({
   destination: path.join(__dirname, '../uploads/images'),
@@ -12,32 +11,47 @@ const storage = multer.diskStorage({
 })
 const upload = multer({ storage })
 
-router.get('/', auth, (req, res) => {
-  const items = db.prepare('SELECT * FROM items WHERE wishlist_id = ?').all(req.params.id)
-  res.json(items)
+router.get('/', auth, async (req, res) => {
+  try {
+    const items = await db.all_('SELECT * FROM items WHERE wishlist_id = ?', [req.params.id])
+    res.json(items)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-router.post('/', auth, upload.single('image'), (req, res) => {
-  const { title, note } = req.body
-  const image_url = req.file ? `/uploads/images/${req.file.filename}` : null
-  const result = db.prepare(
-    'INSERT INTO items (wishlist_id, title, note, image_url) VALUES (?, ?, ?, ?)'
-  ).run(req.params.id, title, note, image_url)
-  res.json({ id: result.lastInsertRowid, title, note, image_url, completed: 0 })
+router.post('/', auth, upload.single('image'), async (req, res) => {
+  try {
+    const { title, note } = req.body
+    const image_url = req.file ? `/uploads/images/${req.file.filename}` : null
+    const result = await db.run_(
+      'INSERT INTO items (wishlist_id, title, note, image_url) VALUES (?, ?, ?, ?)',
+      [req.params.id, title, note, image_url]
+    )
+    res.json({ id: result.lastInsertRowid, title, note, image_url, completed: 0 })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// PATCH toggle completed
-router.patch('/:itemId', auth, (req, res) => {
-  const { completed } = req.body
-  db.prepare('UPDATE items SET completed = ? WHERE id = ?')
-    .run(completed ? 1 : 0, req.params.itemId)
-  const item = db.prepare('SELECT * FROM items WHERE id = ?').get(req.params.itemId)
-  res.json(item)
+router.patch('/:itemId', auth, async (req, res) => {
+  try {
+    const { completed } = req.body
+    await db.run_('UPDATE items SET completed = ? WHERE id = ?', [completed ? 1 : 0, req.params.itemId])
+    const item = await db.get_('SELECT * FROM items WHERE id = ?', [req.params.itemId])
+    res.json(item)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-router.delete('/:itemId', auth, (req, res) => {
-  db.prepare('DELETE FROM items WHERE id = ?').run(req.params.itemId)
-  res.json({ success: true })
+router.delete('/:itemId', auth, async (req, res) => {
+  try {
+    await db.run_('DELETE FROM items WHERE id = ?', [req.params.itemId])
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 module.exports = router

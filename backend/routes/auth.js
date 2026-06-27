@@ -8,27 +8,32 @@ const db = require('../db')
 const generateToken = (user) =>
   jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: '7d' })
 
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   const { email, password, name } = req.body
   const hashed = bcrypt.hashSync(password, 10)
   try {
-    const result = db.prepare('INSERT INTO users (email, password, name) VALUES (?, ?, ?)').run(email, hashed, name)
+    const result = await db.run_(
+      'INSERT INTO users (email, password, name) VALUES (?, ?, ?)',
+      [email, hashed, name]
+    )
     res.json({ id: result.lastInsertRowid })
   } catch {
     res.status(400).json({ error: 'Email already exists' })
   }
 })
 
-router.post('/login', (req, res) => {
-  const { email, password } = req.body
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
-  if (!user || !bcrypt.compareSync(password, user.password))
-    return res.status(401).json({ error: 'Invalid credentials' })
-
-  res.json({ token: generateToken(user), name: user.name })
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body
+    const user = await db.get_('SELECT * FROM users WHERE email = ?', [email])
+    if (!user || !bcrypt.compareSync(password, user.password))
+      return res.status(401).json({ error: 'Invalid credentials' })
+    res.json({ token: generateToken(user), name: user.name })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
-// Google OAuth routes
 router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 )
@@ -38,7 +43,6 @@ router.get('/google/callback',
   (req, res) => {
     const token = generateToken(req.user)
     const name = req.user.name
-    // Redirect to frontend with token in URL — frontend grabs it and stores it
     res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}&name=${encodeURIComponent(name)}`)
   }
 )
