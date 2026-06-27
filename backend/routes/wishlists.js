@@ -4,7 +4,7 @@ const multer = require('multer')
 const path = require('path')
 const crypto = require('crypto')
 const auth = require('../middleware/auth')
-const db = require('../db')
+const { run_, get_, all_ } = require('../db')
 
 const storage = multer.diskStorage({
   destination: path.join(__dirname, '../uploads/images'),
@@ -14,7 +14,7 @@ const upload = multer({ storage })
 
 router.get('/trophies/all', auth, async (req, res) => {
   try {
-    const trophies = await db.all_(`
+    const trophies = await all_(`
       SELECT items.*, wishlists.name as wishlist_name
       FROM items
       JOIN wishlists ON items.wishlist_id = wishlists.id
@@ -37,7 +37,7 @@ router.get('/trophies/all', auth, async (req, res) => {
 
 router.get('/', auth, async (req, res) => {
   try {
-    const wishlists = await db.all_(`
+    const wishlists = await all_(`
       SELECT * FROM wishlists
       WHERE user_id = ?
         OR EXISTS (
@@ -60,7 +60,7 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/:id/members', auth, async (req, res) => {
   try {
-    const access = await db.get_(`
+    const access = await get_(`
       SELECT 1 FROM wishlists
       WHERE id = ?
         AND (
@@ -75,7 +75,7 @@ router.get('/:id/members', auth, async (req, res) => {
 
     if (!access) return res.status(403).json({ error: 'Not authorized' })
 
-    const members = await db.all_(`
+    const members = await all_(`
       SELECT users.id, users.name, users.email, wishlist_members.role, wishlist_members.joined_at
       FROM wishlist_members
       JOIN users ON wishlist_members.user_id = users.id
@@ -90,21 +90,21 @@ router.get('/:id/members', auth, async (req, res) => {
 
 router.post('/:id/invite/link', auth, async (req, res) => {
   try {
-    const wishlist = await db.get_(
+    const wishlist = await get_(
       'SELECT * FROM wishlists WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     )
     if (!wishlist) return res.status(403).json({ error: 'Only the owner can generate invite links' })
 
-    let invite = await db.get_('SELECT * FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
+    let invite = await get_('SELECT * FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
 
     if (!invite) {
       const code = crypto.randomBytes(8).toString('hex')
-      await db.run_(
+      await run_(
         'INSERT INTO wishlist_invites (wishlist_id, invite_code, created_by) VALUES (?, ?, ?)',
         [req.params.id, code, req.user.id]
       )
-      invite = await db.get_('SELECT * FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
+      invite = await get_('SELECT * FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
     }
 
     res.json({ invite_code: invite.invite_code })
@@ -116,27 +116,27 @@ router.post('/:id/invite/link', auth, async (req, res) => {
 router.post('/:id/invite/email', auth, async (req, res) => {
   try {
     const { email } = req.body
-    const wishlist = await db.get_(
+    const wishlist = await get_(
       'SELECT * FROM wishlists WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     )
     if (!wishlist) return res.status(403).json({ error: 'Only the owner can invite collaborators' })
 
-    const invitee = await db.get_('SELECT * FROM users WHERE email = ?', [email])
+    const invitee = await get_('SELECT * FROM users WHERE email = ?', [email])
     if (!invitee) return res.status(404).json({ error: 'No user found with that email address' })
     if (invitee.id === req.user.id) return res.status(400).json({ error: 'You cannot invite yourself' })
 
-    const existing = await db.get_(
+    const existing = await get_(
       'SELECT * FROM wishlist_members WHERE wishlist_id = ? AND user_id = ?',
       [req.params.id, invitee.id]
     )
     if (existing) return res.status(400).json({ error: 'This person is already a collaborator' })
 
-    await db.run_(
+    await run_(
       'INSERT INTO wishlist_members (wishlist_id, user_id, role) VALUES (?, ?, ?)',
       [req.params.id, invitee.id, 'collaborator']
     )
-    await db.run_("UPDATE wishlists SET privacy = 'collaborative' WHERE id = ?", [req.params.id])
+    await run_("UPDATE wishlists SET privacy = 'collaborative' WHERE id = ?", [req.params.id])
 
     res.json({ success: true, name: invitee.name })
   } catch (err) {
@@ -146,13 +146,13 @@ router.post('/:id/invite/email', auth, async (req, res) => {
 
 router.delete('/:id/members/:userId', auth, async (req, res) => {
   try {
-    const wishlist = await db.get_(
+    const wishlist = await get_(
       'SELECT * FROM wishlists WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     )
     if (!wishlist) return res.status(403).json({ error: 'Only the owner can remove collaborators' })
 
-    await db.run_(
+    await run_(
       'DELETE FROM wishlist_members WHERE wishlist_id = ? AND user_id = ?',
       [req.params.id, req.params.userId]
     )
@@ -164,7 +164,7 @@ router.delete('/:id/members/:userId', auth, async (req, res) => {
 
 router.get('/:id', auth, async (req, res) => {
   try {
-    const wishlist = await db.get_(`
+    const wishlist = await get_(`
       SELECT * FROM wishlists
       WHERE id = ?
         AND (
@@ -190,11 +190,11 @@ router.post('/', auth, async (req, res) => {
   try {
     const { name, description, color, privacy } = req.body
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' })
-    const result = await db.run_(
+    const result = await run_(
       'INSERT INTO wishlists (user_id, name, description, color, privacy) VALUES (?, ?, ?, ?, ?)',
       [req.user.id, name.trim(), description || null, color || null, privacy || 'private']
     )
-    const wishlist = await db.get_('SELECT * FROM wishlists WHERE id = ?', [result.lastInsertRowid])
+    const wishlist = await get_('SELECT * FROM wishlists WHERE id = ?', [result.lastInsertRowid])
     res.json({ ...wishlist, my_role: 'owner' })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -205,7 +205,7 @@ router.post('/:id/cover', auth, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No image uploaded' })
 
-    const wishlist = await db.get_(`
+    const wishlist = await get_(`
       SELECT * FROM wishlists
       WHERE id = ?
         AND (
@@ -221,7 +221,7 @@ router.post('/:id/cover', auth, upload.single('image'), async (req, res) => {
     if (!wishlist) return res.status(404).json({ error: 'Wishlist not found' })
 
     const cover_url = `/uploads/images/${req.file.filename}`
-    await db.run_('UPDATE wishlists SET cover_url = ? WHERE id = ?', [cover_url, req.params.id])
+    await run_('UPDATE wishlists SET cover_url = ? WHERE id = ?', [cover_url, req.params.id])
     res.json({ cover_url })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -231,13 +231,13 @@ router.post('/:id/cover', auth, upload.single('image'), async (req, res) => {
 router.patch('/:id', auth, async (req, res) => {
   try {
     const { name, description, color, privacy } = req.body
-    const wishlist = await db.get_(
+    const wishlist = await get_(
       'SELECT * FROM wishlists WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     )
     if (!wishlist) return res.status(403).json({ error: 'Only the owner can update this wishlist' })
 
-    await db.run_(`
+    await run_(`
       UPDATE wishlists
       SET name = COALESCE(?, name),
           description = COALESCE(?, description),
@@ -246,7 +246,7 @@ router.patch('/:id', auth, async (req, res) => {
       WHERE id = ?
     `, [name || null, description || null, color || null, privacy || null, req.params.id])
 
-    const updated = await db.get_('SELECT * FROM wishlists WHERE id = ?', [req.params.id])
+    const updated = await get_('SELECT * FROM wishlists WHERE id = ?', [req.params.id])
     res.json({ ...updated, my_role: 'owner' })
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -255,16 +255,16 @@ router.patch('/:id', auth, async (req, res) => {
 
 router.delete('/:id', auth, async (req, res) => {
   try {
-    const wishlist = await db.get_(
+    const wishlist = await get_(
       'SELECT * FROM wishlists WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     )
     if (!wishlist) return res.status(403).json({ error: 'Only the owner can delete this wishlist' })
 
-    await db.run_('DELETE FROM items WHERE wishlist_id = ?', [req.params.id])
-    await db.run_('DELETE FROM wishlist_members WHERE wishlist_id = ?', [req.params.id])
-    await db.run_('DELETE FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
-    await db.run_('DELETE FROM wishlists WHERE id = ?', [req.params.id])
+    await run_('DELETE FROM items WHERE wishlist_id = ?', [req.params.id])
+    await run_('DELETE FROM wishlist_members WHERE wishlist_id = ?', [req.params.id])
+    await run_('DELETE FROM wishlist_invites WHERE wishlist_id = ?', [req.params.id])
+    await run_('DELETE FROM wishlists WHERE id = ?', [req.params.id])
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
