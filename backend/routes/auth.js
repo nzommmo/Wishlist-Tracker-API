@@ -1,4 +1,4 @@
-// routes/auth.js
+// routes/auth.js (Auth Config)
 const router = require('express').Router()
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
