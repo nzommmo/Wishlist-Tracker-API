@@ -23,3 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 #
+
+
+node_modules/
+.env
+db/database.sqlite
+uploads/images/*
+!uploads/images/.gitkeep
