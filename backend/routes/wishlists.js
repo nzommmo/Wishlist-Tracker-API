@@ -162,6 +162,30 @@ router.delete('/:id/members/:userId', auth, async (req, res) => {
   }
 })
 
+// GET all scheduled items across all accessible wishlists
+router.get('/calendar/events', auth, async (req, res) => {
+  try {
+    const events = await all_(`
+      SELECT items.*, wishlists.name as wishlist_name, wishlists.color as wishlist_color
+      FROM items
+      JOIN wishlists ON items.wishlist_id = wishlists.id
+      WHERE (
+        wishlists.user_id = ?
+        OR EXISTS (
+          SELECT 1 FROM wishlist_members
+          WHERE wishlist_members.wishlist_id = wishlists.id
+            AND wishlist_members.user_id = ?
+        )
+      )
+      AND items.scheduled_date IS NOT NULL
+      ORDER BY items.scheduled_date ASC
+    `, [req.user.id, req.user.id])
+    res.json(events)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const wishlist = await get_(`
