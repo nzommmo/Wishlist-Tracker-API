@@ -27,6 +27,25 @@ ready.then((db) => {
       FOREIGN KEY (user_id) REFERENCES users(id),
       UNIQUE(wishlist_id, user_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS item_comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      comment TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (item_id) REFERENCES items(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS item_reactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      emoji TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (item_id) REFERENCES items(id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(item_id, user_id, emoji)
+    )`,
   ]
 
   migrations.forEach(sql => {

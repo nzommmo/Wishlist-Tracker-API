@@ -27,10 +27,16 @@ app.use('/api/auth', require('./routes/auth'))
 // Join via invite link
 app.get('/api/join/:code', auth, async (req, res) => {
   try {
-    const invite = await get_('SELECT * FROM wishlist_invites WHERE invite_code = ?', [req.params.code])
+    const invite = await get_(
+      'SELECT * FROM wishlist_invites WHERE invite_code = ?',
+      [req.params.code]
+    )
     if (!invite) return res.status(404).json({ error: 'Invalid or expired invite link' })
 
-    const wishlist = await get_('SELECT * FROM wishlists WHERE id = ?', [invite.wishlist_id])
+    const wishlist = await get_(
+      'SELECT * FROM wishlists WHERE id = ?',
+      [invite.wishlist_id]
+    )
     if (wishlist.user_id === req.user.id)
       return res.status(400).json({ error: 'You already own this wishlist' })
 
@@ -40,9 +46,14 @@ app.get('/api/join/:code', auth, async (req, res) => {
     )
 
     if (!existing) {
-      await run_('INSERT INTO wishlist_members (wishlist_id, user_id, role) VALUES (?, ?, ?)',
-        [invite.wishlist_id, req.user.id, 'collaborator'])
-      await run_("UPDATE wishlists SET privacy = 'collaborative' WHERE id = ?", [invite.wishlist_id])
+      await run_(
+        'INSERT INTO wishlist_members (wishlist_id, user_id, role) VALUES (?, ?, ?)',
+        [invite.wishlist_id, req.user.id, 'collaborator']
+      )
+      await run_(
+        "UPDATE wishlists SET privacy = 'collaborative' WHERE id = ?",
+        [invite.wishlist_id]
+      )
     }
 
     res.json({ wishlist_id: invite.wishlist_id, wishlist_name: wishlist.name })
